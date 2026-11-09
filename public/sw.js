@@ -3,11 +3,13 @@
    Hashed build assets are cache-first, then refreshed. */
 const CACHE = "helios-shell-v1";
 
+const SCOPE = new URL("./", self.location).pathname;
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(["/"]))
+      .then((cache) => cache.addAll([SCOPE]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -32,10 +34,10 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put("/", copy));
+          caches.open(CACHE).then((cache) => cache.put(SCOPE, copy));
           return response;
         })
-        .catch(() => caches.match(request).then((hit) => hit || caches.match("/"))),
+        .catch(() => caches.match(request).then((hit) => hit || caches.match(SCOPE))),
     );
     return;
   }

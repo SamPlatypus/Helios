@@ -145,7 +145,12 @@ function authPopupPlugin(): Plugin {
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
+// GitHub Pages is a static host. `GITHUB_PAGES=1` emits an SPA shell instead of
+// the Vercel server, under the project-site base `/Helios/`.
+const pages = process.env.GITHUB_PAGES === "1";
+
 export default defineConfig(({ command, isPreview }) => ({
+  base: pages ? "/Helios/" : "/",
   server: {
     host: "0.0.0.0",
     port: 8080,
@@ -166,8 +171,20 @@ export default defineConfig(({ command, isPreview }) => ({
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),
-    tanstackStart(),
-    ...(command === "build" || isPreview
+    tanstackStart(
+      pages
+        ? {
+            spa: {
+              enabled: true,
+              prerender: {
+                outputPath: "/index",
+                crawlLinks: true,
+              },
+            },
+          }
+        : {},
+    ),
+    ...((command === "build" || isPreview) && !pages
       ? [
           nitro({
             preset: "vercel",
