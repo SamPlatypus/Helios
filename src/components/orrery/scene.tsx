@@ -17,37 +17,6 @@ import { useSolar } from "@/lib/solar/store";
 import { formatJulian } from "@/lib/solar/time";
 import { getTextures, type OrreryTextures } from "./textures";
 
-const VERT = /* glsl */ `
-  varying vec3 vNormal;
-  varying vec3 vWorld;
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    vec4 world = modelMatrix * vec4(position, 1.0);
-    vWorld = world.xyz;
-    vNormal = normalize(mat3(modelMatrix) * normal);
-    gl_Position = projectionMatrix * viewMatrix * world;
-  }
-`;
-
-const FRAG = /* glsl */ `
-  uniform sampler2D uMap;
-  varying vec3 vNormal;
-  varying vec3 vWorld;
-  varying vec2 vUv;
-  void main() {
-    vec3 n = normalize(vNormal);
-    vec3 toSun = normalize(-vWorld);
-    float ndl = dot(n, toSun);
-    float shade = smoothstep(-0.18, 0.42, ndl);
-    shade = mix(0.2, 1.0, shade);
-    // Canvas textures are uploaded as sRGB; the GPU already returns linear samples.
-    vec3 albedo = texture2D(uMap, vUv).rgb;
-    gl_FragColor = vec4(albedo * shade, 1.0);
-    #include <colorspace_fragment>
-  }
-`;
-
 const TRAIL = 140;
 const ORBIT_STEPS = 192;
 
@@ -79,13 +48,12 @@ const worldPos: Record<BodyId, THREE.Vector3> = {
 };
 
 const sunMat = new THREE.MeshBasicMaterial({ color: "#fff1d4" });
+sunMat.toneMapped = false;
 
 function makeLitMaterial(map: THREE.Texture) {
-  return new THREE.ShaderMaterial({
-    uniforms: { uMap: { value: map } },
-    vertexShader: VERT,
-    fragmentShader: FRAG,
-  });
+  const mat = new THREE.MeshBasicMaterial({ map });
+  mat.toneMapped = false;
+  return mat;
 }
 
 function Stars() {
@@ -106,7 +74,7 @@ function Stars() {
   }, []);
   return (
     <points geometry={geo} raycast={() => null}>
-      <pointsMaterial color="#d5dbe6" size={1.35} sizeAttenuation={false} depthWrite={false} />
+      <pointsMaterial color="#e7edf6" size={2.1} sizeAttenuation={false} depthWrite={false} />
     </points>
   );
 }
@@ -213,7 +181,7 @@ function BodyView({
   return (
     <group ref={root}>
       <group rotation={[body.obliquityDeg * DEG, 0, 0]}>
-        <mesh ref={globe} material={material} raycast={() => null}>
+        <mesh ref={globe} material={material} renderOrder={2} frustumCulled={false} raycast={() => null}>
           <sphereGeometry args={[1, id === "sun" ? 40 : 36, id === "sun" ? 28 : 24]} />
           {id === "earth" && (
             <mesh scale={1.06} raycast={() => null}>
@@ -228,7 +196,7 @@ function BodyView({
             </mesh>
           )}
           {id === "sun" && (
-            <sprite scale={[2.15, 2.15, 1]} raycast={() => null}>
+            <sprite scale={[3.6, 3.6, 1]} renderOrder={3} raycast={() => null}>
               <spriteMaterial
                 map={textures.glow}
                 transparent
@@ -256,8 +224,7 @@ function BodyView({
         <ringGeometry args={[1.35, 1.5, 48]} />
         <meshBasicMaterial color="#e6e8ee" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <mesh
-        ref={hit}
+      <mesh ref={hit} renderOrder={1} frustumCulled={false}
         onClick={(event) => {
           event.stopPropagation();
           useSolar.getState().select(id);
@@ -271,7 +238,7 @@ function BodyView({
         }}
       >
         <sphereGeometry args={[1, 10, 8]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} colorWrite={false} />
       </mesh>
     </group>
   );
@@ -343,7 +310,7 @@ function OrbitPath({
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (
     <lineLoop ref={lineRef} geometry={geometry} frustumCulled={false} raycast={() => null}>
-      <lineBasicMaterial color={BODIES[id].tint} transparent opacity={0.38} depthWrite={false} />
+      <lineBasicMaterial color={BODIES[id].tint} transparent opacity={0.62} depthWrite={false} />
     </lineLoop>
   );
 }
@@ -459,21 +426,27 @@ function Simulator({ nodes }: { nodes: RefObject<Map<BodyId, Nodes>> }) {
       const hidden = id === "pluto" && !state.showPluto;
       node.root.visible = !hidden;
       node.root.position.copy(worldPos[id]);
-      const radius = visualRadius(id, scale);
-      node.globe.scale.setScalar(radius);
-      if (node.ring) node.ring.scale.setScalar(radius);
-      const turns = (sim.jd * 24) / BODIES[id].spinHours;
-      node.globe.rotation.y = turns * Math.PI * 2;
-      node.reticle.visible = state.selectedId === id && !hidden;
-      node.reticle.scale.setScalar(Math.max(radius * 1.9, 0.7));
       const distance = Math.max(0.5, camera.position.distanceTo(worldPos[id]));
-      const minWorld = pxScale * distance * 28;
+      const worldPerPx = pxScale * distance;
+      const minPx = id === "sun" ? 36 : id === "moon" ? 10 : 18;
       let nearest = Infinity;
       WORLD_ORDER.forEach((other) => {
         if (other === id) return;
         if (other === "pluto" && !state.showPluto) return;
         nearest = Math.min(nearest, worldPos[id].distanceTo(worldPos[other]));
       });
+      const minRadius = (minPx * worldPerPx) / 2;
+      let radius = Math.max(visualRadius(id, scale), minRadius);
+      if (id !== "sun" && Number.isFinite(nearest)) {
+        radius = Math.min(radius, Math.max(minRadius * 0.75, nearest * 0.48));
+      }
+      node.globe.scale.setScalar(radius);
+      if (node.ring) node.ring.scale.setScalar(radius);
+      const turns = (sim.jd * 24) / BODIES[id].spinHours;
+      node.globe.rotation.y = turns * Math.PI * 2;
+      node.reticle.visible = state.selectedId === id && !hidden;
+      node.reticle.scale.setScalar(Math.max(radius * 1.9, 0.7));
+      const minWorld = worldPerPx * 28;
       const base = id === "sun" ? radius * 1.3 : Math.max(radius * 1.55, 0.85);
       const cap = Number.isFinite(nearest) ? nearest * 0.46 : minWorld;
       node.hit.scale.setScalar(Math.min(Math.max(base, minWorld), Math.max(base, cap)));
@@ -551,7 +524,7 @@ function Simulator({ nodes }: { nodes: RefObject<Map<BodyId, Nodes>> }) {
     });
 
     uiTick.current += dt;
-    if (uiTick.current > 0.25) {
+    if (uiTick.current > 1) {
       uiTick.current = 0;
       const selected = state.selectedId;
       let liveDistance: string | null = null;
@@ -648,7 +621,7 @@ function CameraRig({ controls }: { controls: RefObject<OrbitControlsImpl | null>
     controlsRef.target.copy(pos);
     camera.position.copy(pos).add(offset);
     controlsRef.update();
-  }, 1);
+  });
 
   return null;
 }
@@ -672,6 +645,16 @@ function InitialFrame() {
     framed.current = true;
   }, [camera, size.width, size.height]);
 
+  return null;
+}
+
+function PixelMode() {
+  const gl = useThree((s) => s.gl);
+  const lowPower = useSolar((s) => s.lowPower);
+  useEffect(() => {
+    const full = Math.min(window.devicePixelRatio || 1, 1.5);
+    gl.setPixelRatio(lowPower ? 1 : full);
+  }, [gl, lowPower]);
   return null;
 }
 
@@ -706,6 +689,7 @@ function SceneContents() {
   return (
     <>
       <color attach="background" args={["#07080c"]} />
+      <PixelMode />
       <InitialFrame />
       <Stars />
       <Belt />
@@ -746,7 +730,7 @@ export function OrreryScene() {
   return (
     <Canvas
       camera={{ position: [0, 220, 300], fov: 52, near: 0.08, far: 2200 }}
-      dpr={[1, 1.6]}
+      dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       onCreated={({ gl, camera }) => {
         gl.setClearColor("#07080c", 1);

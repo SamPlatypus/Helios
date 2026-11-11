@@ -37,6 +37,24 @@ export function unixToJd(ms: number): number {
   return ms / 86400000 + 2440587.5;
 }
 
+export function formatMultiplier(daysPerSecond: number): string {
+  if (!Number.isFinite(daysPerSecond) || daysPerSecond <= 0) return "0×";
+  if (daysPerSecond < 10) {
+    const digits = daysPerSecond < 1 ? 2 : 1;
+    return `${daysPerSecond.toFixed(digits)}×`;
+  }
+  return `${Math.round(daysPerSecond)}×`;
+}
+
+export const SPEED_STEPS = [1, 2, 5, 10, 20, 50, 100, 250, 500];
+
+export function stepRate(current: number, direction: -1 | 1): number {
+  if (direction > 0) {
+    return SPEED_STEPS.find((step) => step > current + 0.05) ?? SPEED_STEPS[SPEED_STEPS.length - 1];
+  }
+  return [...SPEED_STEPS].reverse().find((step) => step < current - 0.05) ?? SPEED_STEPS[0];
+}
+
 export function formatRate(daysPerSecond: number): string {
   if (daysPerSecond < 1) {
     return `${(daysPerSecond * 24).toFixed(1)} hours / sec`;
@@ -50,11 +68,11 @@ export function formatRate(daysPerSecond: number): string {
   return `${Math.round(years)} years / sec`;
 }
 
-const RATE_MIN = Math.log(0.25);
-const RATE_MAX = Math.log(365.25 * 60);
+const RATE_MIN = Math.log(1);
+const RATE_MAX = Math.log(500);
 
 export function rateToSlider(daysPerSecond: number): number {
-  const t = (Math.log(Math.min(Math.max(daysPerSecond, 0.25), 365.25 * 60)) - RATE_MIN) / (RATE_MAX - RATE_MIN);
+  const t = (Math.log(Math.min(Math.max(daysPerSecond, 1), 500)) - RATE_MIN) / (RATE_MAX - RATE_MIN);
   return Math.round(t * 1000);
 }
 

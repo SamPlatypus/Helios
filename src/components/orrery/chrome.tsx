@@ -4,7 +4,7 @@ import { MoreHorizontal, Pause, Play } from "lucide-react";
 import { BODIES, WORLD_ORDER, staticFacts, type BodyId } from "@/lib/solar/catalog";
 import { sim, bootSim } from "@/lib/solar/sim";
 import { loadSolarSettings, saveSolarSettings, useSolar } from "@/lib/solar/store";
-import { formatJulian, formatRate, rateToSlider, sliderToRate } from "@/lib/solar/time";
+import { formatJulian, formatMultiplier, formatRate, rateToSlider, sliderToRate, stepRate } from "@/lib/solar/time";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 
@@ -101,23 +101,66 @@ function SkyLabels() {
         raw.push({ id, x: point.x, y: point.y });
       });
       raw.sort((a, b) => {
+        if (a.id === "sun") return -1;
+        if (b.id === "sun") return 1;
         if (a.id === selectedId) return -1;
         if (b.id === selectedId) return 1;
         return a.y - b.y;
       });
-      const kept: Array<{ id: BodyId; x: number; y: number }> = [];
-      raw.forEach((mark) => {
-        const crowded = kept.some((other) => {
-          const dx = other.x - mark.x;
-          const dy = other.y - mark.y;
-          return dx * dx + dy * dy < 52 * 52;
+      const placed: Array<{ id: BodyId; x: number; y: number }> = [];
+      const overlaps = (x: number, y: number, id: BodyId) => {
+        const w = Math.max(48, BODIES[id].name.length * 7.6);
+        const h = 18;
+        return placed.some((other) => {
+          const ow = Math.max(48, BODIES[other.id].name.length * 7.6);
+          const left = x - w / 2;
+          const oleft = other.x - ow / 2;
+          return left < oleft + ow + 10 && left + w + 10 > oleft && y - h / 2 < other.y + 8 && y + h / 2 + 8 > other.y - h / 2;
         });
-        if (!crowded || mark.id === selectedId) kept.push(mark);
+      };
+      raw.forEach((mark) => {
+        const preferred =
+          mark.id === "moon"
+            ? [
+                [22, 18],
+                [0, 20],
+                [34, 8],
+                [-28, 18],
+              ]
+            : mark.id === "earth"
+              ? [
+                  [0, -18],
+                  [-26, -16],
+                  [26, -16],
+                  [0, -34],
+                ]
+              : [
+                  [0, -16],
+                  [0, 18],
+                  [32, -8],
+                  [-32, -8],
+                  [0, -34],
+                  [28, 16],
+                  [-28, 16],
+                ];
+        let chosen = preferred[0];
+        for (const [ox, oy] of preferred) {
+          const x = mark.x + ox;
+          const y = mark.y + oy;
+          if (x < 28 || x > width - 28 || y < 96 || y > height - 120) continue;
+          if (!overlaps(x, y, mark.id)) {
+            chosen = [ox, oy];
+            break;
+          }
+        }
+        const x = Math.min(width - 28, Math.max(28, mark.x + chosen[0]));
+        const y = Math.min(height - 108, Math.max(96, mark.y + chosen[1]));
+        placed.push({ id: mark.id, x, y });
       });
-      const key = kept.map((mark) => `${mark.id}:${mark.x.toFixed(0)}:${mark.y.toFixed(0)}`).join("|");
+      const key = placed.map((mark) => `${mark.id}:${mark.x.toFixed(0)}:${mark.y.toFixed(0)}`).join("|");
       if (key !== lastKey.current) {
         lastKey.current = key;
-        setMarks(kept);
+        setMarks(placed);
       }
     };
     frame = requestAnimationFrame(loop);
@@ -131,7 +174,7 @@ function SkyLabels() {
         <p
           key={mark.id}
           className={`absolute text-sm leading-none ${mark.id === selectedId ? "text-fg" : "text-muted"}`}
-          style={{ left: mark.x, top: mark.y, transform: "translate(-50%, calc(-100% - 0.65rem))" }}
+          style={{ left: mark.x, top: mark.y, transform: "translate(-50%, -50%)" }}
         >
           {BODIES[mark.id].name}
         </p>
@@ -149,6 +192,7 @@ export function Chrome() {
   const showOrbits = useSolar((s) => s.showOrbits);
   const showBelt = useSolar((s) => s.showBelt);
   const showPluto = useSolar((s) => s.showPluto);
+  const lowPower = useSolar((s) => s.lowPower);
   const bodyScale = useSolar((s) => s.bodyScale);
   const selectedId = useSolar((s) => s.selectedId);
   const dateLabel = useSolar((s) => s.dateLabel);
@@ -167,7 +211,7 @@ export function Chrome() {
 
   useEffect(() => {
     saveSolarSettings();
-  }, [daysPerSecond, showLabels, showTrails, showOrbits, showBelt, showPluto, bodyScale]);
+  }, [daysPerSecond, showLabels, showTrails, showOrbits, showBelt, showPluto, lowPower, bodyScale]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -199,22 +243,43 @@ export function Chrome() {
         className="pointer-events-none fixed inset-x-0 top-0 z-20 flex justify-center px-4"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        <div className="flex max-w-full items-center gap-2">
-          <div className="min-w-0 rounded-lg border border-border bg-surface px-4 py-2 text-center">
-            <p className="font-display text-base text-fg tabular-nums">{dateLabel}</p>
+        <div className="flex max-w-full flex-col items-center gap-2">
+          <div className="max-w-full min-w-0 rounded-lg border border-border bg-surface px-4 py-2 text-center">
+            <p className="truncate font-display text-sm text-fg tabular-nums sm:text-base">
+              {dateLabel}
+              <span className="text-muted"> · {formatMultiplier(daysPerSecond)}</span>
+            </p>
             <p className="text-sm text-muted">
               {paused && selected ? `Paused · ${selected.name}` : paused ? "Paused" : selected ? selected.name : "Tap a world"}
             </p>
           </div>
-          <button
-            type="button"
-            className="pointer-events-auto flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-fg focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-            aria-pressed={paused}
-            aria-label={paused ? "Play simulation" : "Pause simulation"}
-            onClick={() => useSolar.getState().setPaused(!paused)}
-          >
-            {paused ? <Play className="size-5" aria-hidden="true" /> : <Pause className="size-5" aria-hidden="true" />}
-          </button>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              type="button"
+              className="flex size-12 items-center justify-center rounded-full border border-border bg-surface text-lg text-fg focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+              aria-label="Slower"
+              onClick={() => useSolar.getState().setDaysPerSecond(stepRate(useSolar.getState().daysPerSecond, -1))}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="flex size-12 items-center justify-center rounded-full border border-border bg-surface text-fg focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+              aria-pressed={paused}
+              aria-label={paused ? "Play simulation" : "Pause simulation"}
+              onClick={() => useSolar.getState().setPaused(!paused)}
+            >
+              {paused ? <Play className="size-5" aria-hidden="true" /> : <Pause className="size-5" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              className="flex size-12 items-center justify-center rounded-full border border-border bg-surface text-lg text-fg focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+              aria-label="Faster"
+              onClick={() => useSolar.getState().setDaysPerSecond(stepRate(useSolar.getState().daysPerSecond, 1))}
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
 
@@ -249,7 +314,7 @@ export function Chrome() {
                 max={1000}
                 step={1}
                 value={rateToSlider(daysPerSecond)}
-                display={formatRate(daysPerSecond)}
+                display={`${formatMultiplier(daysPerSecond)} · ${formatRate(daysPerSecond)}`}
                 onValueChange={(value) => useSolar.getState().setDaysPerSecond(sliderToRate(value))}
               />
               <SliderBlock
@@ -339,6 +404,12 @@ export function Chrome() {
                 label="Pluto"
                 checked={showPluto}
                 onCheckedChange={(value) => useSolar.getState().setShowPluto(value)}
+              />
+              <ToggleRow
+                id="low-power"
+                label="Low-power mode"
+                checked={lowPower}
+                onCheckedChange={(value) => useSolar.getState().setLowPower(value)}
               />
             </div>
 

@@ -10,6 +10,7 @@ export type SolarState = {
   showOrbits: boolean;
   showBelt: boolean;
   showPluto: boolean;
+  lowPower: boolean;
   bodyScale: number;
   selectedId: BodyId | null;
   dateLabel: string;
@@ -22,6 +23,7 @@ export type SolarState = {
   setShowOrbits: (showOrbits: boolean) => void;
   setShowBelt: (showBelt: boolean) => void;
   setShowPluto: (showPluto: boolean) => void;
+  setLowPower: (lowPower: boolean) => void;
   setBodyScale: (bodyScale: number) => void;
   select: (id: BodyId) => void;
   clearSelection: () => void;
@@ -29,16 +31,17 @@ export type SolarState = {
   patchLive: (patch: { dateLabel: string; liveDistance: string | null; liveSpeed: string | null }) => void;
 };
 
-const STORAGE_KEY = "helios.settings.v1";
+const STORAGE_KEY = "helios.settings.v2";
 
 export const useSolar = create<SolarState>((set, get) => ({
   paused: false,
-  daysPerSecond: 12,
+  daysPerSecond: 20,
   showLabels: true,
   showTrails: true,
   showOrbits: true,
   showBelt: true,
   showPluto: false,
+  lowPower: false,
   bodyScale: 1,
   selectedId: null,
   dateLabel: "Setting the clock…",
@@ -57,6 +60,7 @@ export const useSolar = create<SolarState>((set, get) => ({
       selectedId: !showPluto && selectedId === "pluto" ? null : selectedId,
     });
   },
+  setLowPower: (lowPower) => set({ lowPower }),
   setBodyScale: (bodyScale) => set({ bodyScale }),
   select: (id) => set({ selectedId: id, liveDistance: null, liveSpeed: null }),
   clearSelection: () => set({ selectedId: null, liveDistance: null, liveSpeed: null }),
@@ -68,7 +72,7 @@ export const useSolar = create<SolarState>((set, get) => ({
 
 type Saved = Pick<
   SolarState,
-  "daysPerSecond" | "showLabels" | "showTrails" | "showOrbits" | "showBelt" | "showPluto" | "bodyScale"
+  "daysPerSecond" | "showLabels" | "showTrails" | "showOrbits" | "showBelt" | "showPluto" | "lowPower" | "bodyScale"
 >;
 
 export function loadSolarSettings() {
@@ -77,11 +81,11 @@ export function loadSolarSettings() {
     if (!raw) return;
     const parsed = JSON.parse(raw) as Partial<Saved> & { version?: number };
     const next: Partial<Saved> = {};
-    if (typeof parsed.daysPerSecond === "number" && parsed.daysPerSecond > 0) {
+    if (typeof parsed.daysPerSecond === "number" && parsed.daysPerSecond >= 1 && parsed.daysPerSecond <= 80) {
       next.daysPerSecond = parsed.daysPerSecond;
     }
     if (typeof parsed.bodyScale === "number") next.bodyScale = Math.min(1.8, Math.max(0.7, parsed.bodyScale));
-    (["showLabels", "showTrails", "showOrbits", "showBelt", "showPluto"] as const).forEach((key) => {
+    (["showLabels", "showTrails", "showOrbits", "showBelt", "showPluto", "lowPower"] as const).forEach((key) => {
       if (typeof parsed[key] === "boolean") next[key] = parsed[key];
     });
     useSolar.setState(next);
@@ -93,13 +97,14 @@ export function loadSolarSettings() {
 export function saveSolarSettings() {
   const s = useSolar.getState();
   const payload: Saved & { version: number } = {
-    version: 1,
+    version: 2,
     daysPerSecond: s.daysPerSecond,
     showLabels: s.showLabels,
     showTrails: s.showTrails,
     showOrbits: s.showOrbits,
     showBelt: s.showBelt,
     showPluto: s.showPluto,
+    lowPower: s.lowPower,
     bodyScale: s.bodyScale,
   };
   try {
