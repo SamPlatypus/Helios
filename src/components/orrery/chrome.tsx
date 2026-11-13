@@ -295,15 +295,24 @@ export function Chrome() {
             aria-label={`${selected.name} information`}
           >
             <div className="flex items-start justify-between gap-3">
-              <h2 className="min-w-0 font-display text-xl leading-tight text-fg">{selected.name}</h2>
-              <button
-                type="button"
-                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-fg"
-                aria-label="Hide information"
-                onClick={() => useSolar.getState().setFactsOpen(false)}
-              >
-                <ChevronDown className="size-5" aria-hidden="true" />
-              </button>
+              <h2 className="min-w-0 truncate font-display text-xl leading-tight text-fg">{selected.name}</h2>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="min-h-11 rounded-sm border border-border px-3 text-base whitespace-nowrap text-fg"
+                  onClick={() => useSolar.getState().clearSelection()}
+                >
+                  Release camera
+                </button>
+                <button
+                  type="button"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-fg"
+                  aria-label="Hide information"
+                  onClick={() => useSolar.getState().setFactsOpen(false)}
+                >
+                  <ChevronDown className="size-5" aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <p className="mt-3 text-base leading-relaxed text-muted">{selected.summary}</p>
             {(liveDistance || liveSpeed) && (
