@@ -13,6 +13,7 @@ export type SolarState = {
   lowPower: boolean;
   bodyScale: number;
   selectedId: BodyId | null;
+  factsOpen: boolean;
   dateLabel: string;
   liveDistance: string | null;
   liveSpeed: string | null;
@@ -26,6 +27,7 @@ export type SolarState = {
   setLowPower: (lowPower: boolean) => void;
   setBodyScale: (bodyScale: number) => void;
   select: (id: BodyId) => void;
+  setFactsOpen: (factsOpen: boolean) => void;
   clearSelection: () => void;
   goToToday: () => void;
   patchLive: (patch: { dateLabel: string; liveDistance: string | null; liveSpeed: string | null }) => void;
@@ -44,6 +46,7 @@ export const useSolar = create<SolarState>((set, get) => ({
   lowPower: false,
   bodyScale: 1,
   selectedId: null,
+  factsOpen: false,
   dateLabel: "Setting the clock…",
   liveDistance: null,
   liveSpeed: null,
@@ -58,12 +61,21 @@ export const useSolar = create<SolarState>((set, get) => ({
     set({
       showPluto,
       selectedId: !showPluto && selectedId === "pluto" ? null : selectedId,
+      factsOpen: !showPluto && selectedId === "pluto" ? false : get().factsOpen,
     });
   },
   setLowPower: (lowPower) => set({ lowPower }),
   setBodyScale: (bodyScale) => set({ bodyScale }),
-  select: (id) => set({ selectedId: id, liveDistance: null, liveSpeed: null }),
-  clearSelection: () => set({ selectedId: null, liveDistance: null, liveSpeed: null }),
+  select: (id) => {
+    const current = get();
+    if (current.selectedId === id) {
+      set({ factsOpen: !current.factsOpen });
+      return;
+    }
+    set({ selectedId: id, factsOpen: true, liveDistance: null, liveSpeed: null });
+  },
+  setFactsOpen: (factsOpen) => set({ factsOpen }),
+  clearSelection: () => set({ selectedId: null, factsOpen: false, liveDistance: null, liveSpeed: null }),
   goToToday: () => {
     jumpToToday();
   },

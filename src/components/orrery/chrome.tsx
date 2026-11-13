@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { MoreHorizontal, Pause, Play } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, Pause, Play } from "lucide-react";
 import { BODIES, WORLD_ORDER, staticFacts, type BodyId } from "@/lib/solar/catalog";
 import { sim, bootSim } from "@/lib/solar/sim";
 import { loadSolarSettings, saveSolarSettings, useSolar } from "@/lib/solar/store";
@@ -195,6 +195,7 @@ export function Chrome() {
   const lowPower = useSolar((s) => s.lowPower);
   const bodyScale = useSolar((s) => s.bodyScale);
   const selectedId = useSolar((s) => s.selectedId);
+  const factsOpen = useSolar((s) => s.factsOpen);
   const dateLabel = useSolar((s) => s.dateLabel);
   const liveDistance = useSolar((s) => s.liveDistance);
   const liveSpeed = useSolar((s) => s.liveSpeed);
@@ -287,6 +288,51 @@ export function Chrome() {
         className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex flex-col items-center px-4"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
+        {selected && factsOpen && !open && (
+          <section
+            id="helios-facts-card"
+            className="menu-scroll pointer-events-auto mb-3 max-h-[46dvh] w-full max-w-md overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-surface p-4"
+            aria-label={`${selected.name} information`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="min-w-0 font-display text-xl leading-tight text-fg">{selected.name}</h2>
+              <button
+                type="button"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-fg"
+                aria-label="Hide information"
+                onClick={() => useSolar.getState().setFactsOpen(false)}
+              >
+                <ChevronDown className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <p className="mt-3 text-base leading-relaxed text-muted">{selected.summary}</p>
+            {(liveDistance || liveSpeed) && (
+              <div className="mt-4 flex flex-col gap-1">
+                <h3 className="text-sm text-muted">Right now</h3>
+                {liveDistance && <p className="text-base leading-relaxed break-words text-fg tabular-nums">{liveDistance}</p>}
+                {liveSpeed && <p className="text-base leading-relaxed text-fg tabular-nums">{liveSpeed}</p>}
+              </div>
+            )}
+            <dl className="mt-4 flex flex-col gap-5">
+              {staticFacts(selected.id).map((row) => (
+                <div key={row.label} className="flex flex-col gap-1">
+                  <dt className="text-sm text-muted">{row.label}</dt>
+                  <dd className="text-base leading-relaxed break-words text-fg">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+        {selected && !factsOpen && !open && (
+          <button
+            type="button"
+            className="pointer-events-auto mb-3 flex size-11 items-center justify-center rounded-full border border-border bg-surface text-fg"
+            aria-label={`Show ${selected.name} information`}
+            onClick={() => useSolar.getState().setFactsOpen(true)}
+          >
+            <ChevronUp className="size-5" aria-hidden="true" />
+          </button>
+        )}
         {open && (
           <section
             id="helios-menu"

@@ -737,6 +737,9 @@ export function OrreryScene() {
         gl.toneMapping = THREE.NoToneMapping;
         camera.lookAt(0, 0, 0);
       }}
+      onPointerMissed={() => {
+        if (useSolar.getState().selectedId) useSolar.getState().setFactsOpen(false);
+      }}
     >
       <SceneContents />
     </Canvas>
