@@ -1,15 +1,21 @@
 /* Offline shell for installable / Play-packaged use.
    Navigations are network-first with a cached fallback.
    Hashed build assets are cache-first, then refreshed. */
-const CACHE = "helios-shell-v1";
+const CACHE = "helios-shell-v2";
 
 const SCOPE = new URL("./", self.location).pathname;
+const SHELL = [
+  SCOPE,
+  new URL("manifest.webmanifest", self.location).href,
+  new URL("icons/icon-192.png", self.location).href,
+  new URL("icons/icon-512.png", self.location).href,
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll([SCOPE]))
+      .then((cache) => cache.addAll(SHELL))
       .then(() => self.skipWaiting()),
   );
 });
